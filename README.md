@@ -1,50 +1,108 @@
-Central Asia–China Chromium Supply Chain Research
+# China–Kazakhstan Chromium Supply Chains: Bilingual Topic Modeling
 
-Research code for a paper on China–Kazakhstan chromium supply chains, submitted to CAPS Unlock (Central Asia Policy Studies).
+Code for the text-analysis part of a research project on China's dependence on Kazakhstan for chromium, carried out under the CAPS Unlock research fellowship.
 
-Research questions:
+The notebook in this repo takes a set of English and Chinese research papers, splits them into passages, and uses BERTopic with multilingual sentence embeddings to find out which topics each language's literature focuses on.
 
-RQ1: Industrial dependency structures between Kazakhstan and China
-RQ2: Post-2022 geopolitical fragmentation effects on the supply chain
-RQ3: Cross-lingual framing divergence — does Chinese-language discourse securitize chromium access more than English-language discourse frames it in economic/trade terms?
-What's in this repo
-notebooks/framing_classifier.ipynb — bilingual zero-shot framing classifier (English vs. Chinese sources) using mDeBERTa-v3-base-mnli-xnli. Extracts and chunks PDF text with pdfplumber, filters chunks with a chromium-specific keyword list, classifies each chunk as security-framed vs. economic-framed.
-notebooks/topic_modeling.ipynb — BERTopic pipeline using paraphrase-multilingual-mpnet-base-v2 embeddings to find cross-lingual topic clusters.
-notebooks/supply_chain_network.ipynb — dependency mapping / HHI concentration index stub (USGS production data; Kazakhstan export destination data pending from ERG annual reports or UN Comtrade HS code 2610).
-data/ — processed outputs only (classification results, topic tables). Raw PDFs are NOT stored here — see below.
-The literature corpus (PDFs)
+**Paper:** *China's Chromium Dependency on Kazakhstan: Computational Mapping of China–Kazakhstan Chromium Supply Chains After 2022*
 
-The raw PDF corpus (English + Chinese sources) is not in this repo — journal articles are copyrighted, and GitHub isn't an appropriate place to redistribute them.
+## Research questions
 
-The corpus lives in Google Drive: chromium_project/pdfs/. Ask Milana to share that folder with you directly.
+The project asks three questions. This repo covers the third.
 
-To run the notebooks against the real corpus:
+1. How dependent are China and Kazakhstan on each other in the chromium supply chain?
+2. How did the geopolitical changes after 2022 affect that supply chain?
+3. Do Chinese-language and English-language sources talk about chromium and critical minerals differently?
 
-Mount your own Google Drive in Colab (from google.colab import drive; drive.mount('/content/drive'))
-Point the notebook's PDF_DIR variable at wherever you've placed the shared pdfs/ folder
-Chinese-language PDFs from CNKI go in the same folder, tagged/named consistently (see naming convention below)
+## What is in this repo
 
-File naming convention: [lang]_[shortcite].pdf, e.g. en_brautigam2023.pdf, zh_wang2022.pdf — the pipeline uses the en_/zh_ prefix to route documents to the right language model.
+| File | What it does |
+| --- | --- |
+| `topic_modeling.ipynb` | Full pipeline: PDF text extraction, chunking, multilingual embeddings, BERTopic, topic share by language. Saved outputs from the last run are included in the notebook. |
 
-Running the code
+The source PDFs are not included because they are copyrighted journal articles.
 
-Everything was built and tested in Google Colab (T4 GPU runtime). Recommended path:
+## How the pipeline works
 
-Open the notebook in Colab (upload from this repo, or open directly from GitHub via Colab's "File → Open notebook → GitHub" and paste this repo URL)
-Mount Drive and set PDF_DIR as above
-Run cells top to bottom — model weights (mDeBERTa, sentence-transformers) download automatically from Hugging Face on first run
+1. **Extract text** from each PDF with `pdfplumber`.
+2. **Split into chunks** of up to 800 characters, cut at sentence boundaries. The splitter handles both English and Chinese punctuation (`.` `!` `?` `。` `！` `？`).
+3. **Embed every chunk** with `paraphrase-multilingual-mpnet-base-v2`. This model places English and Chinese text in the same vector space, so passages on the same subject can end up in the same topic regardless of language.
+4. **Cluster with BERTopic** (UMAP for dimensionality reduction, HDBSCAN for clustering, minimum topic size 8). UMAP uses a fixed random seed so the topics are the same on every run.
+5. **Label topics** with a custom tokenizer: `jieba` for Chinese, whitespace split for English. BERTopic's default tokenizer splits on spaces, which does not work for Chinese and leaves Chinese topics with empty labels.
+6. **Compare languages:** compute what share of each language's chunks falls into each topic.
 
-To run locally instead of Colab:
+All chunks are used, not only those that mention chromium, because the goal is to see what each literature talks about overall.
 
-bash
-pip install -r requirements.txt
+## Results from the saved run
 
-Then run the notebooks with Jupyter. A GPU is recommended for the classifier and embeddings step but not strictly required — it'll just be slower on CPU.
+Corpus in this run:
 
-Outputs
-data/framing_results.csv — per-chunk classification (security vs. economic framing), by language
-data/topic_info.csv, data/topic_by_lang.csv — BERTopic outputs
-Current headline result: English sources ~22% security framing vs. Chinese sources ~31%, consistent with the RQ3 hypothesis. Manual validation on a 20-chunk sample showed ~90% agreement with the classifier. Known limitation: implicit security framing (e.g. "managing risk," "dispersed patterns") is systematically under-detected by the zero-shot classifier — see the methodology/limitations section of the paper draft for full discussion.
-Notes for collaborators
-Use Google Sheets, not Excel, for editing any bilingual (Chinese-character) data — Excel corrupts UTF-8 Chinese text on save.
-Citation management is in Zotero (Google Docs plugin) — avoid triple-clicking sources in the citation dialog, it's a known bug that duplicates entries.
+| | English | Chinese | Total |
+| --- | --- | --- | --- |
+| Documents | 9 | 5 | 14 |
+| Chunks | 1,076 | 244 | 1,320 |
+
+BERTopic found 29 topics. 298 chunks (23%) were not assigned to any topic.
+
+**Topics are mostly split by language.** Only 3 of the 29 topics hold at least 1% of the chunks in both languages:
+
+| Topic (top words) | English share | Chinese share |
+| --- | --- | --- |
+| chromium, China, chromite, resources | 3.9% (42 chunks) | 2.0% (5 chunks) |
+| energy, renewable, demand | 1.6% (17 chunks) | 3.3% (8 chunks) |
+| China, Central Asia | 1.2% (13 chunks) | 1.6% (4 chunks) |
+
+**What each language's sources focus on:**
+
+- **English sources:** critical mineral resources and deals (15.0% of English chunks), trade and political alignment between countries (7.6%), international relations theory (6.7%), land rights (5.0%), and several Kazakhstan-specific topics (foreign policy hedging, the period after 2022, the Eurasian Economic Union).
+- **Chinese sources:** reserve and production figures in tonnes (10.2% of Chinese chunks), national security strategy and US policy toward Central Asia (8.2%), supply diversification and the US Defense Production Act (6.6%), C5+1 diplomacy (3.7%), and production capacity in other supplier countries such as Australia, Indonesia and Chile (2.5%).
+
+In this corpus, the Chinese sources spend more of their text on supply figures and great-power strategy, while the English sources spend more on trade, deals and Kazakhstan's own position.
+
+## Limitations
+
+- **Small and unbalanced corpus.** 14 documents, and the Chinese side has only 244 chunks, so one chunk is 0.4% of the Chinese total. The shares above describe these documents, not the two literatures in general.
+- **The language split may be partly a model effect.** Multilingual embeddings still carry information about which language a text is in, so chunks can cluster by language even when the subject is similar. The split should not be read as proof that the two literatures discuss different things.
+- **Noisy topics.** Judging by their top words, 9 of the 29 topics (173 chunks) are PDF extraction noise, not real subjects: URLs and reference lists, regression table fragments, text extracted in reverse order from one PDF, and full-width Latin characters from the Chinese PDFs.
+- **No stopword removal.** Many English topic labels are dominated by words like "the", "of" and "and".
+- **No topic quality score.** Coherence was not measured, and topics were not manually validated.
+
+Planned fixes: strip reference sections and URLs before chunking, normalize full-width characters, add English and Chinese stopword lists, and report topic coherence.
+
+## How to run
+
+The notebook was built and run in Google Colab with a T4 GPU.
+
+1. Put the PDFs in Google Drive in this structure:
+
+   ```
+   chromium_project/
+   ├── pdfs/
+   │   ├── en/    English PDFs
+   │   └── zh/    Chinese PDFs
+   └── data/      outputs are written here
+   ```
+
+2. Open `topic_modeling.ipynb` in Colab and change `BASE` if your folder is somewhere else.
+3. Run the first two cells. Model weights download from Hugging Face on the first run.
+
+Dependencies installed by the notebook: `pdfplumber`, `sentence-transformers`, `bertopic`, `umap-learn`, `hdbscan`, `jieba`, `transformers`, `torch`. The notebook pins `pillow==10.4.0`, which makes pip print a version warning for `pdfplumber`; the run still completes.
+
+Outputs written to `data/`:
+
+| File | Contents |
+| --- | --- |
+| `topic_modeling_chunks.csv` | Every chunk with its source file, language and assigned topic |
+| `topic_modeling_topics.csv` | Topic list with sizes and top words |
+| `topic_by_language.csv` | Share of each language's chunks in each topic |
+
+## Other parts of the project
+
+These are part of the same research but their code is not in this repo yet:
+
+- **Framing classifier.** A zero-shot classifier (`mDeBERTa-v3-base-mnli-xnli`) that labels each chromium-related passage as security-framed or economic-framed.
+- **Supply chain concentration.** Herfindahl–Hirschman Index and trade network analysis on UN Comtrade data.
+
+## Author
+
+Milana Pak, Kazakh-British Technical University. Research conducted with a co-researcher under the CAPS Unlock fellowship.
